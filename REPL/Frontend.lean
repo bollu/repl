@@ -41,7 +41,7 @@ unsafe def processInput (input : String) (env? : Option Environment)
     Lean.initSearchPath leanPath
     IO.println s!"search path: {leanPath}"
     enableInitializersExecution
-    let (header, parserState, messages) ← Parser.parseHeader inputCtx
+    let (header, parserState, messages) ← withImporting <| Parser.parseHeader inputCtx
     let (env, messages) ← withImporting <| processHeader header opts messages inputCtx
     pure (parserState, (Command.mkState env messages opts))
   | some env => do
