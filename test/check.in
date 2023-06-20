@@ -1,1 +1,4 @@
-{"cmd": "#check algebraInt"}
+{"cmd": "import Mathlib.Algebra.Algebra.Basic"}
+
+{"cmd": "#check algebraInt", "env": 0}
+

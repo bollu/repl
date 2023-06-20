@@ -8,6 +8,9 @@ import REPL.Frontend
 import REPL.InfoTree
 import Mathlib
 
+#check algebraInt
+
+-- example : Algebra ℤ ℝ := inferInstance
 /-!
 # A REPL for Lean.
 
