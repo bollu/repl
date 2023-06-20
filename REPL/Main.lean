@@ -6,6 +6,7 @@ Authors: Scott Morrison
 import REPL.JSON
 import REPL.Frontend
 import REPL.InfoTree
+import Mathlib
 
 /-!
 # A REPL for Lean.
