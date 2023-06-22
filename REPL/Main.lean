@@ -108,6 +108,85 @@ where loop : M IO Unit := do
     | .ok (r : Run) => IO.println <| toString <| toJson (← run r)
   loop
 
+-- TOJson instance, fine.
+-- 1. string for "goal" + "hypotheses" 
+-- 2. in the term mode sense, local context + type
+-- 3. list of the constants in every expression. 
+structure MLInfo where
+deriving ToJson
+
+-- MetavarContext : MVar -> MVarDecl
+-- MVarDecl: info about each mvar + local-context
+-- local-context: a typing context of hypotheses + judgements.
+--  this is also used during e.g. locally nameless manipulations,
+--  where going under telescopes extends the local-context. 
+--  Said differently, it's a map from FVarId to LocalDecl
+-- LocalDecl: name, type, value, binder info, etc.
+
+def MLInfo.default : MLInfo := { : MLInfo }  
+
+-- For each TacticInfo node, look at subnodes that are TermInfo and collect
+--   constants from their expression. This will be the constants that have been
+--   created upon tactic elaboration.
+-- For each TermInfo node, 
+
+-- For each TermInfo info, go through their children, and if it's an identifier,
+--  check what it elaborates to. If it elaborates to an 
+--  (application of a constant) [or a constant],
+--  keep it. 
+-- le_refl -> ... 
+open Meta in 
+partial def getInfoFromTree (tree : InfoTree) : IO MLInfo := do 
+  tree.foldInfo' (init := pure MLInfo.default) fun ctx tree infoM => do
+    match tree with 
+    | .node (i := Info.ofTacticInfo i) .. =>
+        let mctxBefore := i.mctxBefore
+        for g in i.goalsBefore do 
+          let decl := mctxBefore.getDecl g
+          ctx.runMetaM decl.lctx <| do 
+            let fmt ← _root_.Lean.Meta.ppGoal g
+            let s := toString fmt
+            IO.println s
+          if i.goalsAfter.contains g then continue
+          ctx.runMetaM decl.lctx <| do
+            withMCtx i.mctxAfter <| do 
+              let gval ← instantiateMVars (Expr.mvar g)
+              let fmt ← _root_.Lean.Meta.ppExpr gval
+              let s := toString fmt
+              IO.println s!"goal: {s}"
+        infoM
+        
+    -- TODO: this is not what we wanted. For every term, collect these
+    -- identifiers in the children.
+    | .node (i := Info.ofTermInfo i) .. =>
+      match i.stx with 
+      | .ident .. => do 
+        -- if it's an ident, now we need to check what it elaborates to.
+        --  if it's a constant, we keep it.
+        -- Recall that `Name` can correspond to names that are both 
+        -- pre-and-post resolution, so we cannot use the `Ident.name`.
+        -- Rather, we look at the elaborated Expr and grab the head of the
+        -- function application (assuming it is an application).
+        IO.println s!"identifier {i.stx} with expression {i.expr.getAppFn.constName}" 
+      | _ => pure ()
+      try
+        ctx.runMetaM i.lctx <| do
+          -- isBinder?
+          let e := i.expr 
+          let t ← inferType e   
+          let consts := e.foldConsts (init := []) List.cons
+          IO.println s!"expr: ({← ppExpr e} : {← ppExpr t}) | {consts}"
+      catch _ex => pure () 
+      infoM
+    | _ => infoM
+
+
 /-- Main executable function, run as `lake env lean --run Mathlib/Util/REPL.lean`. -/
 unsafe def main (_ : List String) : IO Unit := do
-  repl
+  -- TODO: take file path from command line for scripting.
+  let contents ← IO.FS.readFile "lake-packages/mathlib/Mathlib/Algebra/Algebra/Basic.lean"
+  let (env, messages, trees) ← IO.processInput contents (env? := .none) {} ""
+  IO.println s!"num info trees: {trees.length}"  
+  for tree in trees do 
+    let _ ← getInfoFromTree tree 
+
